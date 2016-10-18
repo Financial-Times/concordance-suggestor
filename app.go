@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/Financial-Times/base-ft-rw-app-go/baseftrwapp"
+	"github.com/Financial-Times/concordance-suggestor/suggestor"
 	"github.com/Financial-Times/go-fthealth/v1a"
 	"github.com/Financial-Times/http-handlers-go/httphandlers"
 	"github.com/Financial-Times/neo-utils-go/neoutils"
-	"github.com/Financial-Times/public-people-api/people"
 	status "github.com/Financial-Times/service-status-go/httphandlers"
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
@@ -111,17 +111,17 @@ func runServer(neoURL string, port string, cacheDuration string, env string) {
 		log.Fatalf("Error connecting to neo4j %s", err)
 	}
 
-	people.PeopleDriver = people.NewCypherDriver(db, env)
+	suggestor.SuggestorDriver = suggestor.NewCypherDriver(db, env)
 
 	servicesRouter := mux.NewRouter()
 
 	// Health checks and standards first
-	servicesRouter.HandleFunc("/__health", v1a.Handler("PeopleReadWriteNeo4j Healthchecks",
-		"Checks for accessing neo4j", people.HealthCheck()))
+	servicesRouter.HandleFunc("/__health", v1a.Handler("ConcordanceSuggestor Healthchecks",
+		"Checks for accessing neo4j", suggestor.HealthCheck()))
 
 	// Then API specific ones:
-	//servicesRouter.HandleFunc("/people/{uuid}", people.GetPerson).Methods("GET")
-	//servicesRouter.HandleFunc("/people/{uuid}", people.MethodNotAllowedHandler)
+	servicesRouter.HandleFunc("/people/{uuid}", suggestor.GetConcordanceSuggestion).Methods("GET")
+	servicesRouter.HandleFunc("/people/{uuid}", suggestor.MethodNotAllowedHandler)
 
 	var monitoringRouter http.Handler = servicesRouter
 	monitoringRouter = httphandlers.TransactionAwareRequestLoggingHandler(log.StandardLogger(), monitoringRouter)
@@ -134,7 +134,7 @@ func runServer(neoURL string, port string, cacheDuration string, env string) {
 	http.HandleFunc(status.PingPathDW, status.PingHandler)
 	http.HandleFunc(status.BuildInfoPath, status.BuildInfoHandler)
 	http.HandleFunc(status.BuildInfoPathDW, status.BuildInfoHandler)
-	http.HandleFunc("/__gtg", people.GoodToGo)
+	http.HandleFunc("/__gtg", suggestor.GoodToGo)
 	http.Handle("/", monitoringRouter)
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

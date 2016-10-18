@@ -30,7 +30,6 @@ func (pcw CypherDriver) CheckConnectivity() error {
 }
 
 func (pcw CypherDriver) Read(contentId uuid.UUID) (concordanceSuggestion []ConcordanceSuggestion, found bool, err error) {
-	//concordanceSuggestion = []ConcordanceSuggestion{}
 
 	// Get all major mentions
 	majorMentionsOrgUuids := getAllMajorMentions(pcw, contentId)
@@ -51,6 +50,7 @@ func (pcw CypherDriver) Read(contentId uuid.UUID) (concordanceSuggestion []Conco
 	return []ConcordanceSuggestion{}, true, nil
 }
 
+// I don't like passing the driver this way!!!
 func getAllMajorMentions(pcw CypherDriver, contentUuid uuid.UUID) (uuids []uuid.UUID) {
 
 	results := []struct {

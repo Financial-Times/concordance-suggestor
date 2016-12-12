@@ -3,9 +3,6 @@ package main
 import (
 	"net/http"
 	"os"
-
-	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/Financial-Times/base-ft-rw-app-go/baseftrwapp"
@@ -24,7 +21,7 @@ func main() {
 	app := cli.App("concordance-suggestor-neo4j", "A public RESTful API to try and suggest organisation concordances")
 	neoURL := app.String(cli.StringOpt{
 		Name:   "neo-url",
-		Value:  "http://localhost:7474/db/data",
+		Value:  "http://ftaps67109-law1a-eu-p:8080/db/data",
 		Desc:   "neo4j endpoint URL",
 		EnvVar: "NEO_URL",
 	})
@@ -63,12 +60,6 @@ func main() {
 		Value: "local",
 		Desc:  "environment this app is running in",
 	})
-	cacheDuration := app.String(cli.StringOpt{
-		Name:   "cache-duration",
-		Value:  "30s",
-		Desc:   "Duration Get requests should be cached for. e.g. 2h45m would set the max-age value to '7440' seconds",
-		EnvVar: "CACHE_DURATION",
-	})
 
 	app.Action = func() {
 		parsedLogLevel, err := log.ParseLevel(*logLevel)
@@ -80,19 +71,13 @@ func main() {
 		baseftrwapp.OutputMetricsIfRequired(*graphiteTCPAddress, *graphitePrefix, *logMetrics)
 
 		log.Infof("concordance-suggestor will listen on port: %s, connecting to: %s", *port, *neoURL)
-		runServer(*neoURL, *port, *cacheDuration, *env)
+		runServer(*neoURL, *port, *env)
 	}
 	log.Infof("Application started with args %s", os.Args)
 	app.Run(os.Args)
 }
 
-func runServer(neoURL string, port string, cacheDuration string, env string) {
-
-	if duration, durationErr := time.ParseDuration(cacheDuration); durationErr != nil {
-		log.Fatalf("Failed to parse cache duration string, %v", durationErr)
-	} else {
-		people.CacheControlHeader = fmt.Sprintf("max-age=%s, public", strconv.FormatFloat(duration.Seconds(), 'f', 0, 64))
-	}
+func runServer(neoURL string, port string, env string) {
 
 	conf := neoutils.ConnectionConfig{
 		BatchSize:     1024,
@@ -120,8 +105,9 @@ func runServer(neoURL string, port string, cacheDuration string, env string) {
 		"Checks for accessing neo4j", suggestor.HealthCheck()))
 
 	// Then API specific ones:
-	servicesRouter.HandleFunc("/people/{uuid}", suggestor.GetConcordanceSuggestion).Methods("GET")
-	servicesRouter.HandleFunc("/people/{uuid}", suggestor.MethodNotAllowedHandler)
+	// Should be /suggestions?contentId=uuid and /suggestions?v1OrganisationId=uuid ????
+	servicesRouter.HandleFunc("/content/{uuid}", suggestor.GetConcordanceSuggestionForContentItem).Methods("GET")
+	servicesRouter.HandleFunc("/organisations/{uuid}", suggestor.GetConcordanceSuggestionForOrganisation).Methods("GET")
 
 	var monitoringRouter http.Handler = servicesRouter
 	monitoringRouter = httphandlers.TransactionAwareRequestLoggingHandler(log.StandardLogger(), monitoringRouter)

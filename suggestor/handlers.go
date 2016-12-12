@@ -6,11 +6,8 @@ import (
 	"net/http"
 
 	"github.com/Financial-Times/go-fthealth/v1a"
-	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/satori/go.uuid"
-	"net/url"
-	"strings"
 )
 
 // PeopleDriver for cypher queries
@@ -65,8 +62,8 @@ func MethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// GetPerson is the public API
-func GetConcordanceSuggestion(w http.ResponseWriter, r *http.Request) {
+// GetConcordanceSuggestion is the public API
+func GetConcordanceSuggestionForContentItem(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	requestedId, err := uuid.FromString(vars["uuid"])
 	if err != nil {
@@ -75,23 +72,59 @@ func GetConcordanceSuggestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	person, found, err := SuggestorDriver.Read(requestedId)
-	if err != nil {
-		log.WithFields(log.Fields{"requestedId": requestedId, "err": err}).Debug("Redirecting...")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"message": "` + err.Error() + `"}`))
-		return
-	}
+	concordance, found, err := SuggestorDriver.getOrganisationSuggestionsForAContentItem(requestedId)
+
+	// TODO Should handle error
+
 	if !found {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"Person not found."}`))
+		w.Write([]byte(`{"message":"Concordance not found."}`))
 		return
 	}
+
 	w.Header().Set("Cache-Control", CacheControlHeader)
 	w.WriteHeader(http.StatusOK)
 
-	if err = json.NewEncoder(w).Encode(person); err != nil {
+	if err = json.NewEncoder(w).Encode(concordance); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"message":"Person could not be retrieved, err=` + err.Error() + `"}`))
+		w.Write([]byte(`{"message":"Concordance could not be retrieved, err=` + err.Error() + `"}`))
+	}
+}
+
+func GetConcordanceSuggestionForOrganisation(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	requestedId, err := uuid.FromString(vars["uuid"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	concorded, err := SuggestorDriver.isConcordedToTmeAlready(requestedId)
+	// TODO Should handle error
+
+	if concorded {
+		w.WriteHeader(http.StatusNoContent)
+		w.Write([]byte(`{"message":"Already concorded."}`))
+		return
+	}
+
+	concordance, err := SuggestorDriver.getSuggestionsForOrganisation(requestedId)
+
+	// TODO Should handle error
+
+	if (len(concordance) == 0) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"Concordance not found."}`))
+		return
+	}
+
+	w.Header().Set("Cache-Control", CacheControlHeader)
+	w.WriteHeader(http.StatusOK)
+
+	if err = json.NewEncoder(w).Encode(concordance); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"message":"Concordance could not be retrieved, err=` + err.Error() + `"}`))
 	}
 }
